@@ -184,10 +184,11 @@ static struct usb_device_id fermi_table [] = {
 	{ USB_DEVICE(0x1926, 0x1843) },
 	{ USB_DEVICE(0x1926, 0x1844) },
 	{ USB_DEVICE(0x1926, 0x1845) },
-	{ USB_DEVICE(0x1926, 0x1846) },
+	{ USB_DEVICE(0x1926, 0x1846) }, // HP Compaq Elite 8300 Touch All-in-One PC
 	{ USB_DEVICE(0x1926, 0x1847) },
 	{ USB_DEVICE(0x1926, 0x1848) },
-	{ USB_DEVICE(0x1926, 0x1878) },
+	{ USB_DEVICE(0x1926, 0x1875) }, // Lenovo ThinkCentre M92Z
+	{ USB_DEVICE(0x1926, 0x1878) }, // HP Compaq Elite 8300 Touch All-in-One PC
 	/* Podium devices */
 	{ USB_DEVICE(0x0b8c, 0x0069) },
 	/* Holly devices */

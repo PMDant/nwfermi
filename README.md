@@ -14,7 +14,7 @@ The HP driver has not been updated anymore since 2013, I've made following enhan
 - Fix startup of user space deamon via udev/systemd implementation as you cannot launch 32 bit applications on 64 bits OSes via udev (blocked via seccomp in systemd-udevd)
 - Xorg config example
 
-For models 1926:1846 and 1926:1878 you need to install the additional "fwprod" daemon. Its usage is unclear but seems to work according to #4. See additional steps as required outlined below.
+For models 1926:1846 / 1926:1878 (HP Compaq Elite 8300 Touch All-in-One PC) and model 1926:1875 (Lenovo ThinkCentre M92Z) you need to install the additional "fwprod" daemon. Its usage is unclear but seems to work according to issues #4 & #19. See additional steps as required outlined below.
 
 You should execute the entire procedure with the root user (e.g. execute a `su -` or `sudo -i` before you begin).
 
@@ -29,7 +29,7 @@ You should execute the entire procedure with the root user (e.g. execute a `su -
 apt-get install dkms build-essential autoconf xutils-dev libtool xserver-xorg-dev libc6-i386 pkg-config evtest
 ```
 
-# Install additional packages (models 1926:1846 and 1926:1878)
+# Install additional packages (models 1926:1846 / 1926:1878 / 1926:1875)
 
 Install libudev1 and symlink it to libudev0 (no longer available as i386)
 
@@ -98,15 +98,16 @@ cp etc/systemd/system/nwfermi@.service /etc/systemd/system/
 systemctl daemon-reload
 ```
 
-# Install optional nwfermi files (models 1926:1846 and 1926:1878)
+# Install optional nwfermi files (models 1926:1846 / 1926:1878 / 1926:1875)
 
 - Copy fwprod to /usr/sbin
 ```
 cp usr/sbin/fwprod /usr/sbin
 ```
-- Install systemd service files from this git repo
+- Install systemd service files for your model from this git repo
 ```
 cp etc/systemd/system/fwprod-1926-1846.service /etc/systemd/system/
+cp etc/systemd/system/fwprod-1926-1875.service /etc/systemd/system/
 cp etc/systemd/system/fwprod-1926-1878.service /etc/systemd/system/
 ```
 - Reload systemd
