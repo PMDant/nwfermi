@@ -1,14 +1,12 @@
-# NextWindow Touchscreen on Ubuntu 24.04
+# NextWindow Touchscreen on Linux
 
-This is a guide for installing / configuring a NextWindow Touchscreen on Ubuntu 24.04.
+This is an attempt to rewrite this driver as a DKMS module. Currently it is installed with a userspace daemon component to function with X.  It does function under Wayland with my python shim but Gnome is not allowing mapping to the display.
 
-It has been tested over time and should work fine on 22.04, 20.04 and 18.04 as well, I'm just updating the procedure here once I've validated it on the latest LTS (there might be some delay on this!).
-
-The files in this repo will install nwfermi 0.7.0.1.
+The files in this repo are being continued from nwfermi 0.7.0.1.
 
 It is based on the files provided by HP as SUSE drivers for the "HP Compaq Elite 8300 All-in-One Desktop PC". [HP Support Link](https://support.hp.com/us-en/drivers/selfservice/hp-compaq-elite-8300-all-in-one-desktop-pc/5272027) | [Direct Link](https://ftp.hp.com/pub/softpaq/sp63501-64000/sp63501.tgz)
 
-The HP driver has not been updated anymore since 2013, I've made following enhancements:
+The HP driver has not been updated anymore since 2013, these are the previous enhancements:
 
 - Fix driver compilation (fix work_struct/delayed_work structs usage, fix some minor compiler warnings)
 - Fix startup of user space deamon via udev/systemd implementation as you cannot launch 32 bit applications on 64 bits OSes via udev (blocked via seccomp in systemd-udevd)
@@ -18,12 +16,14 @@ For models 1926:1846 / 1926:1878 (HP Compaq Elite 8300 Touch All-in-One PC) and 
 
 You should execute the entire procedure with the root user (e.g. execute a `su -` or `sudo -i` before you begin).
 
+I have added the shim and other random files I have created to get this working under Arch GNOME 49.3
+
 # Licensing
 
 - The kernel driver has been released under a GPL license by NextWindow
 - The user space daemons and xf86-input-nextwindow Xorg module are copyrighted by NextWindow and released under [following license](LICENSE-NW)
 
-# Install required packages
+# Install required packages (THESE ARE THE OLD METHODS FOR UBUNTU I AM BUILDING ON ARCH CURRENTLY 6.18.6)
 
 ```
 apt-get install dkms build-essential autoconf xutils-dev libtool xserver-xorg-dev libc6-i386 pkg-config evtest
