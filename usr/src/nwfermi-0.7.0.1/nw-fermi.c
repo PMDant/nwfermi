@@ -424,37 +424,47 @@ static ssize_t fermi_read(struct file *file, char *buffer, size_t count, loff_t 
 
 #include "nwfermi_public.h"
 
-static void fermi_input_event(struct usb_fermi *dev, struct fermi_touch_report_t *touch_report)
+static void fermi_input_event(struct usb_fermi *dev, struct fermi_touch_report_t *r)
 {
+    int i;
+    int primary_down = 0;
+
 #ifdef MULTITOUCH
-	int i;
-	int count = min(touch_report->count, (unsigned char)2);
-	// multitouch
-	for (i = 0; i < count; i++)
-	{
-		input_report_abs(dev->input_dev, ABS_MT_TRACKING_ID, touch_report->touch[i].id);
-		input_report_abs(dev->input_dev, ABS_MT_POSITION_X, touch_report->touch[i].x);
-		input_report_abs(dev->input_dev, ABS_MT_POSITION_Y, touch_report->touch[i].y);
-		// we just set width and height to 1 now for android 2.x as it seems to need it
-		input_report_abs(dev->input_dev, ABS_MT_TOUCH_MAJOR, NW1950_DEFAULT_W);
-		input_report_abs(dev->input_dev, ABS_MT_TOUCH_MINOR, NW1950_DEFAULT_H);
-		input_mt_sync(dev->input_dev);
-	}
+    /* Proper MT slot reporting */
+    for (i = 0; i < r->count; i++) {
+        int active = (r->touch[i].state != FERMI_TOUCH_UP);
+
+        input_mt_slot(dev->input_dev, i);
+        input_mt_report_slot_state(dev->input_dev, MT_TOOL_FINGER, active);
+
+        if (active) {
+            input_report_abs(dev->input_dev, ABS_MT_POSITION_X, r->touch[i].x);
+            input_report_abs(dev->input_dev, ABS_MT_POSITION_Y, r->touch[i].y);
+            input_report_abs(dev->input_dev, ABS_MT_TRACKING_ID, r->touch[i].id);
+            input_report_abs(dev->input_dev, ABS_MT_TOUCH_MAJOR, NW1950_DEFAULT_W);
+            input_report_abs(dev->input_dev, ABS_MT_TOUCH_MINOR, NW1950_DEFAULT_H);
+        }
+    }
 #endif
-	// mouse
-	if (touch_report->touch[0].state == FERMI_TOUCH_DOWN ||
-		touch_report->touch[0].state == FERMI_TOUCH ||
-		touch_report->touch[0].state == FERMI_TOUCH_UP ||
-		touch_report->touch[0].state == FERMI_TOUCH_HOVER)
-	{
-		input_report_key(dev->input_dev, BTN_LEFT, touch_report->touch[0].state == FERMI_TOUCH_UP ? 0 : 1);
-		input_report_abs(dev->input_dev, ABS_X, touch_report->touch[0].x);
-		input_report_abs(dev->input_dev, ABS_Y, touch_report->touch[0].y);
-	}
-	// sync
-	input_sync(dev->input_dev);
-	//printk("fermi_write BTN_LEFT: %d, BTN_RIGHT: %d, ABS_X: %d, ABS_Y: %d\n", button & 1, button & 2, x , y);
+
+    /* Primary finger for compatibility */
+    if (r->count > 0) {
+        int s = r->touch[0].state;
+        primary_down = (s == FERMI_TOUCH_DOWN ||
+                        s == FERMI_TOUCH ||
+                        s == FERMI_TOUCH_HOVER);
+
+        input_report_abs(dev->input_dev, ABS_X, r->touch[0].x);
+        input_report_abs(dev->input_dev, ABS_Y, r->touch[0].y);
+        input_report_key(dev->input_dev, BTN_TOUCH, primary_down);
+    }
+
+#ifdef MULTITOUCH
+    input_mt_sync_frame(dev->input_dev);
+#endif
+    input_sync(dev->input_dev);
 }
+
 
 static ssize_t fermi_write(struct file *file, const char *user_buffer,
 			  size_t count, loff_t *ppos)
@@ -713,17 +723,41 @@ static int fermi_probe(struct usb_interface *interface, const struct usb_device_
 		goto error;
 	}
 	dev->input_dev->name = "Nextwindow Fermi Touchscreen";
-	dev->input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
-	dev->input_dev->keybit[BIT_WORD(BTN_MOUSE)] = BIT_MASK(BTN_LEFT) | BIT_MASK(BTN_RIGHT) | BIT_MASK(BTN_TOOL_FINGER);
-	input_set_abs_params(dev->input_dev, ABS_X, NW1950_MIN_X, NW1950_MAX_X, 0, 0);
-	input_set_abs_params(dev->input_dev, ABS_Y, NW1950_MIN_Y, NW1950_MAX_Y, 0, 0);
+	/* Event types */
+__set_bit(EV_KEY, dev->input_dev->evbit);
+__set_bit(EV_ABS, dev->input_dev->evbit);
+
+/* Touchscreen semantics */
+__set_bit(BTN_TOUCH, dev->input_dev->keybit);
+__set_bit(BTN_TOOL_FINGER, dev->input_dev->keybit);
+
+/* Mark as direct-touch */
+input_set_prop(dev->input_dev, INPUT_PROP_DIRECT);
+
+/* Single-touch axes */
+input_set_abs_params(dev->input_dev, ABS_X,
+                     NW1950_MIN_X, NW1950_MAX_X, 0, 0);
+input_set_abs_params(dev->input_dev, ABS_Y,
+                     NW1950_MIN_Y, NW1950_MAX_Y, 0, 0);
+
 #ifdef MULTITOUCH
-	input_set_abs_params(dev->input_dev, ABS_MT_TRACKING_ID, 0, 255, 0, 0);
-	input_set_abs_params(dev->input_dev, ABS_MT_POSITION_X, NW1950_MIN_X, NW1950_MAX_X, 0, 0);
-	input_set_abs_params(dev->input_dev, ABS_MT_POSITION_Y, NW1950_MIN_Y, NW1950_MAX_Y, 0, 0);
-	input_set_abs_params(dev->input_dev, ABS_MT_TOUCH_MAJOR, NW1950_MIN_W, NW1950_MAX_W, 0, 0);
-	input_set_abs_params(dev->input_dev, ABS_MT_TOUCH_MINOR, NW1950_MIN_H, NW1950_MAX_H, 0, 0);
+/* Initialize MT slots */
+retval = input_mt_init_slots(dev->input_dev, 10, INPUT_MT_DIRECT);
+if (retval)
+    goto error;
+
+input_set_abs_params(dev->input_dev, ABS_MT_TRACKING_ID,
+                     0, 65535, 0, 0);
+input_set_abs_params(dev->input_dev, ABS_MT_POSITION_X,
+                     NW1950_MIN_X, NW1950_MAX_X, 0, 0);
+input_set_abs_params(dev->input_dev, ABS_MT_POSITION_Y,
+                     NW1950_MIN_Y, NW1950_MAX_Y, 0, 0);
+input_set_abs_params(dev->input_dev, ABS_MT_TOUCH_MAJOR,
+                     NW1950_MIN_W, NW1950_MAX_W, 0, 0);
+input_set_abs_params(dev->input_dev, ABS_MT_TOUCH_MINOR,
+                     NW1950_MIN_H, NW1950_MAX_H, 0, 0);
 #endif
+
 	retval = input_register_device(dev->input_dev);
 	if (retval) {
 		pr_err("Could not register input device");
