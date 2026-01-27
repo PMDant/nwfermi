@@ -1,6 +1,0 @@
-sdkdir=@sdkdir@
-
-Name: xorg-nextwindow
-Description: X.Org nextwindow input driver.
-Version: @PACKAGE_VERSION@
-Cflags: -I${sdkdir}
