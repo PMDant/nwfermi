@@ -1,301 +1,218 @@
-# NextWindow Touchscreen on Linux
+# NextWindow Fermi Touchscreen Driver v2.0.2
 
-This is an attempt to rewrite this driver as a DKMS module. Currently it is installed with a userspace daemon component to function with X.  It does function under Wayland with my python shim but Gnome is not allowing mapping to the display.
+A modern Linux kernel driver for NextWindow Fermi USB touchscreens, designed to work directly with Wayland/GNOME without requiring a userspace daemon.
 
-The files in this repo are being continued from nwfermi 0.7.0.1.
+## Features
 
-It is based on the files provided by HP as SUSE drivers for the "HP Compaq Elite 8300 All-in-One Desktop PC". [HP Support Link](https://support.hp.com/us-en/drivers/selfservice/hp-compaq-elite-8300-all-in-one-desktop-pc/5272027) | [Direct Link](https://ftp.hp.com/pub/softpaq/sp63501-64000/sp63501.tgz)
+- **No daemon required**: Direct kernel-to-input subsystem communication
+- **Wayland/GNOME compatible**: Works natively with modern Linux desktops  
+- **Multitouch support**: Full support for up to 10 simultaneous touch points
+- **Protocol B multitouch**: Uses modern slotted multitouch protocol
+- **Power management**: Proper suspend/resume support
+- **DKMS integration**: Automatically rebuilds on kernel updates
 
-The HP driver has not been updated anymore since 2013, these are the previous enhancements:
+## Supported Devices
 
-- Fix driver compilation (fix work_struct/delayed_work structs usage, fix some minor compiler warnings)
-- Fix startup of user space deamon via udev/systemd implementation as you cannot launch 32 bit applications on 64 bits OSes via udev (blocked via seccomp in systemd-udevd)
-- Xorg config example
+- HP Compaq Elite 8300 Touch All-in-One PC (0x1926:0x1846, 0x1926:0x1878)
+- Lenovo ThinkCentre M92Z (0x1926:0x1875)
+- Many other NextWindow Fermi devices (see driver source for full list)
 
-For models 1926:1846 / 1926:1878 (HP Compaq Elite 8300 Touch All-in-One PC) and model 1926:1875 (Lenovo ThinkCentre M92Z) you need to install the additional "fwprod" daemon. Its usage is unclear but seems to work according to issues #4 & #19. See additional steps as required outlined below.
+## Installation
 
-You should execute the entire procedure with the root user (e.g. execute a `su -` or `sudo -i` before you begin).
+### Quick Install
 
-I have added the shim and other random files I have created to get this working under Arch GNOME 49.3
-
-# Licensing
-
-- The kernel driver has been released under a GPL license by NextWindow
-- The user space daemons and xf86-input-nextwindow Xorg module are copyrighted by NextWindow and released under [following license](LICENSE-NW)
-
-# Install required packages (THESE ARE THE OLD METHODS FOR UBUNTU I AM BUILDING ON ARCH CURRENTLY 6.18.6)
-
-```
-apt-get install dkms build-essential autoconf xutils-dev libtool xserver-xorg-dev libc6-i386 pkg-config evtest
+```bash
+sudo ./install.sh
+sudo modprobe nwfermi
 ```
 
-# Install additional packages (models 1926:1846 / 1926:1878 / 1926:1875)
+### Manual Installation
 
-Install libudev1 and symlink it to libudev0 (no longer available as i386)
+```bash
+# Install to DKMS
+sudo cp -r nwfermi-2.0.2 /usr/src/
+sudo dkms add -m nwfermi -v 2.0.2
+sudo dkms build -m nwfermi -v 2.0.2
+sudo dkms install -m nwfermi -v 2.0.2
 
-```
-apt-get install libudev1:i386
-```
-
-```
-ln -s /usr/lib/i386-linux-gnu/libudev.so.1 /usr/lib/i386-linux-gnu/libudev.so.0
-```
-
-# Get source files from this Git repo
-
-```
-wget https://github.com/glorang/nwfermi/archive/refs/heads/master.zip
+# Load the module
+sudo modprobe nwfermi
 ```
 
-```
-unzip master.zip
+## Debugging
+
+If your touchscreen isn't working, enable debug output to see what's happening:
+
+### Enable Kernel Debug Messages
+
+```bash
+# Set kernel log level
+sudo bash -c 'echo 8 > /proc/sys/kernel/printk'
+
+# Enable dynamic debugging for this module  
+sudo bash -c 'echo "module nwfermi +p" > /sys/kernel/debug/dynamic_debug/control'
+
+# Watch kernel messages
+sudo dmesg -w | grep -i fermi
 ```
 
-```
-cd nwfermi-master
+### Check Device Detection
+
+```bash
+# See if device is detected
+lsusb | grep 1926
+
+# Check if module is loaded
+lsmod | grep nwfermi
+
+# Check input devices
+ls -la /dev/input/by-id/ | grep -i next
 ```
 
-All following chapters assume you are executing the steps as outlined from within the `nwfermi-master` folder.
+### Monitor Touch Events
 
-# Build and install nwfermi driver
+```bash
+# Install evtest if not available
+sudo apt-get install evtest
 
-- Remove nwfermi/0.6.5.0 if installed
-```
-dkms unbuild nwfermi/0.6.5.0 --all
-```
-- Install nwfermi source to /usr/src
-```
-cp -p -r usr/src/nwfermi-0.7.0.1 /usr/src
-```
-- Build nwfermi/0.7.0.1
-```
-dkms build nwfermi/0.7.0.1
-```
-- Install module
-```
-dkms install nwfermi/0.7.0.1
+# List input devices
+sudo evtest
+
+# Select your touchscreen device number and touch the screen
+# You should see EV_ABS events with coordinates
 ```
 
-# Install required nwfermi files
-- Copy Xorg config
-```
-cp etc/X11/xorg.conf.d/10-nwfermi.conf /etc/X11/xorg.conf.d/
-```
-- Copy nwfermi_daemon to /usr/sbin
-```
-cp usr/sbin/nwfermi_daemon /usr/sbin
-```
-- Install udev rules from this git repo
-```
-cp etc/udev/rules.d/40-nw-fermi.rules /etc/udev/rules.d/
-```
-- Install systemd service files from this git repo
-```
-cp etc/systemd/system/nwfermi@.service /etc/systemd/system/
-```
-- Reload systemd
-```
-systemctl daemon-reload
+### Capture Raw USB Traffic
+
+To understand what the device is sending, you can capture USB traffic:
+
+```bash
+# Load usbmon module
+sudo modprobe usbmon
+
+# Find your device bus and device number
+lsusb | grep 1926
+
+# Capture traffic (replace X with your bus number)
+sudo cat /sys/kernel/debug/usb/usbmon/Xu > /tmp/usb_capture.log
+
+# In another terminal, use the touchscreen
+# Then stop capture with Ctrl+C
+
+# View the capture
+less /tmp/usb_capture.log
 ```
 
-# Install optional nwfermi files (models 1926:1846 / 1926:1878 / 1926:1875)
+## Troubleshooting
 
-- Copy fwprod to /usr/sbin
-```
-cp usr/sbin/fwprod /usr/sbin
-```
-- Install systemd service files for your model from this git repo
-```
-cp etc/systemd/system/fwprod-1926-1846.service /etc/systemd/system/
-cp etc/systemd/system/fwprod-1926-1875.service /etc/systemd/system/
-cp etc/systemd/system/fwprod-1926-1878.service /etc/systemd/system/
-```
-- Reload systemd
-```
-systemctl daemon-reload
-```
+### Touchscreen not responding
 
-# Build xf86-input-nextwindow Xorg module
+1. **Check if device is detected**: `lsusb | grep 1926`
+2. **Check if module is loaded**: `lsmod | grep nwfermi`
+3. **Check kernel messages**: `dmesg | grep -i fermi`
+4. **Enable debug output** (see Debugging section above)
+5. **Check for conflicts**: `lsmod | grep -i touch` - look for other touchscreen drivers
 
-```
-cd usr/src/xf86-input-nextwindow-0.3.4
-```
-```
-chmod +x autogen.sh ; ./autogen.sh
-```
-```
-make
-```
-```
-make install
-```
-- Install module
-```
-cp /usr/local/lib/xorg/modules/input/nextwindow_drv.la /usr/local/lib/xorg/modules/input/nextwindow_drv.so /usr/lib/xorg/modules/input/
+### Python shim still needed?
+
+This driver should completely replace the need for the Python shim. If you still have the shim running:
+
+```bash
+# Find and stop the shim process
+ps aux | grep nwfermi
+sudo killall -9 python3  # or kill specific PID
+
+# Disable the shim from starting automatically
+sudo systemctl disable nwfermi-shim  # if it's a service
 ```
 
-# Disable Wayland / Enable Xorg
+### Coordinates inverted or wrong
 
-Edit `/etc/gdm3/custom.conf` and set `WaylandEnable=false` in the `[daemon]` section.
+The packet parsing may need tuning for your specific device. Please:
 
-# Add your local user to the input group
+1. Enable debug output
+2. Capture a few touch events
+3. Share the debug output so we can improve the driver
 
-To be able to read the input device your local user *must* be part of the *input* group.
-You should add the *gdm* user to this group as well if you want touch to work on the login screen.
-On Linux Mint 22 Xfce Edition, replace `gdm` with `lightdm`.
+## Known Issues
 
-```
-usermod -a -G input gdm
-usermod -a -G input your_username
-```
+- **Initial version**: The packet parsing is based on USB traffic analysis and may need refinement for your specific device
+- **Delta encoding**: The device uses delta-encoded coordinates which may need calibration
+- **Absolute coordinates**: Some packet types may contain absolute coordinates that aren't fully parsed yet
 
-# Reboot
+## How It Works
 
-Reboot and everything should work! Enjoy.
+The driver:
 
-# Debugging
+1. Connects to the USB bulk endpoint
+2. Receives packets starting with `[​]` (0x5B 0x5D) header
+3. Parses packet type (0xD6 for touch updates, 0xD7 for other events)
+4. Extracts touch coordinates (delta-encoded)
+5. Tracks up to 10 simultaneous touches in slots
+6. Reports events to the Linux input subsystem
+7. Works directly with libinput/Wayland
 
-Use following steps for some general debugging hints:
+## Development
 
-- Run `lsusb` and check if your model (1926:XXXX) is supported by the driver [nw-fermi.c, line #49 and onwards](usr/src/nwfermi-0.7.0.1/nw-fermi.c#L49)
-- Check if kernel module is loaded: `lsmod |grep -i fermi`
-- Enter `strings /dev/nwfermi1` (or nwfermi2) it should produce garbage text output when you touch the screen
-- Start nwfermi daemon manually in foreground `/usr/sbin/nwfermi_daemon /instanceId 1`, expected output:
+### Packet Format
 
-```
-# /usr/sbin/nwfermi_daemon /instanceid 1
-StartThreads
-Starting bulk thread
-Starting tl thread
-```
-
-After touching the screen:
+Based on USB traffic analysis:
 
 ```
-state: 1, X: 14893, Y: 22044
-state: 2, X: 14893, Y: 22044
-state: 2, X: 14893, Y: 22044
+Bytes 0-1:  5B 5D (header "[​]")
+Byte 2:     Packet sequence number  
+Byte 3:     Packet type (D6/D7/09)
+Bytes 4-17: Metadata
+Bytes 18+:  Touch data (format varies by type)
 ```
 
-- For model 1926:1846 : Start fwproc manually `/usr/sbin/fwprod /product_id 0x1846 /message 004302F300 /padding_size 65 /timeout 300 /daemon`
-- For model 1926:1878 : Start fwproc manually `/usr/sbin/fwprod /product_id 0x1878 /message 004302F001 /padding_size 65 /timeout 300 /daemon`
+Touch data appears to be delta-encoded signed 8-bit values.
 
-- Run evtest and select "Nextwindow Fermi Touchscreen" and touch your screen, you should see it generate events. Expected output:
+### Contributing
 
-```
-# evtest
-No device specified, trying to scan all of /dev/input/event*
-Available devices:
+If you have a NextWindow device and can help improve the packet parsing:
 
-...
-/dev/input/event8:      Nextwindow Fermi Touchscreen
-...
+1. Enable debug output
+2. Capture touch events with different gestures
+3. Capture USB traffic with usbmon
+4. Share the debug output and describe what you were doing
 
-Select the device event number [0-21]: 8
-Input driver version is 1.0.1
-Input device ID: bus 0x0 vendor 0x0 product 0x0 version 0x0
-Input device name: "Nextwindow Fermi Touchscreen"
-Supported events:
-  Event type 0 (EV_SYN)
-  Event type 1 (EV_KEY)
-    Event code 261 (BTN_5)
-    Event code 272 (BTN_LEFT)
-    Event code 273 (BTN_RIGHT)
-  Event type 3 (EV_ABS)
-    Event code 0 (ABS_X)
-      Value  15028
-      Min        0
-      Max    32767
-    Event code 1 (ABS_Y)
-      Value  18035
-      Min        0
-      Max    32767
-    Event code 48 (ABS_MT_TOUCH_MAJOR)
-      Value      0
-      Min        0
-      Max    32767
-    Event code 49 (ABS_MT_TOUCH_MINOR)
-      Value      0
-      Min        0
-      Max    32767
-    Event code 53 (ABS_MT_POSITION_X)
-      Value      0
-      Min        0
-      Max    32767
-    Event code 54 (ABS_MT_POSITION_Y)
-      Value      0
-      Min        0
-      Max    32767
-    Event code 57 (ABS_MT_TRACKING_ID)
-      Value      0
-      Min        0
-      Max      255
-Properties:
-Testing ... (interrupt to exit)
+## Uninstallation
+
+```bash
+sudo ./uninstall.sh
 ```
 
-After touching the screen:
+Or manually:
 
-```
-Event: time 1673258489.763882, type 3 (EV_ABS), code 57 (ABS_MT_TRACKING_ID), value 0
-Event: time 1673258489.763882, type 3 (EV_ABS), code 53 (ABS_MT_POSITION_X), value 16527
-Event: time 1673258489.763882, type 3 (EV_ABS), code 54 (ABS_MT_POSITION_Y), value 12131
-Event: time 1673258489.763882, type 3 (EV_ABS), code 48 (ABS_MT_TOUCH_MAJOR), value 1000
-Event: time 1673258489.763882, type 3 (EV_ABS), code 49 (ABS_MT_TOUCH_MINOR), value 1000
-Event: time 1673258489.763882, ++++++++++++++ SYN_MT_REPORT ++++++++++++
-Event: time 1673258489.763882, type 1 (EV_KEY), code 272 (BTN_LEFT), value 1
-Event: time 1673258489.763882, type 3 (EV_ABS), code 0 (ABS_X), value 16527
-Event: time 1673258489.763882, type 3 (EV_ABS), code 1 (ABS_Y), value 12131
-Event: time 1673258489.763882, -------------- SYN_REPORT ------------
-Event: time 1673258489.784821, type 3 (EV_ABS), code 57 (ABS_MT_TRACKING_ID), value 0
-Event: time 1673258489.784821, type 3 (EV_ABS), code 53 (ABS_MT_POSITION_X), value 16527
-Event: time 1673258489.784821, type 3 (EV_ABS), code 54 (ABS_MT_POSITION_Y), value 12131
-Event: time 1673258489.784821, type 3 (EV_ABS), code 48 (ABS_MT_TOUCH_MAJOR), value 1000
-Event: time 1673258489.784821, type 3 (EV_ABS), code 49 (ABS_MT_TOUCH_MINOR), value 1000
+```bash
+sudo rmmod nwfermi
+sudo dkms remove -m nwfermi -v 2.0.2 --all
 ```
 
-- Check Xorg log in `/home/<username>/.local/share/xorg/Xorg.0.log` (or Xorg.1.log), expected output:
+## License
 
-```
-$ grep -i fermi /home/glorang/.local/share/xorg/Xorg.1.log
-[    52.662] (II) config/udev: Adding input device Nextwindow Fermi Touchscreen (/dev/input/event9)
-[    52.662] (**) Nextwindow Fermi Touchscreen: Applying InputClass "libinput pointer catchall"
-[    52.662] (**) Nextwindow Fermi Touchscreen: Applying InputClass "Nextwindow Fermi Touchscreen"
-[    52.662] (II) Using input driver 'nextwindow' for 'Nextwindow Fermi Touchscreen'
-[    52.662] (**) Nextwindow Fermi Touchscreen: always reports core events
-[    52.662] (**) Nextwindow Fermi Touchscreen: always reports core events
-[    52.662] (II) Nextwindow Fermi Touchscreen: Using device /dev/input/event9.
-[    52.662] (II) Nextwindow Fermi Touchscreen: Using touch help.
-[    52.718] (II) XINPUT: Adding extended input device "Nextwindow Fermi Touchscreen" (type: UNKNOWN, id 16)
-[    52.718] (**) Nextwindow Fermi Touchscreen: (accel) keeping acceleration scheme 1
-[    52.718] (**) Nextwindow Fermi Touchscreen: (accel) acceleration profile 0
-[    52.718] (**) Nextwindow Fermi Touchscreen: (accel) acceleration factor: 2.000
-[    52.718] (**) Nextwindow Fermi Touchscreen: (accel) acceleration threshold: 4
-[    52.718] (II) Nextwindow Fermi Touchscreen: On.
-[    52.718] (II) config/udev: Adding input device Nextwindow Fermi Touchscreen (/dev/input/js0)
-[    52.718] (**) Nextwindow Fermi Touchscreen: Applying InputClass "Nextwindow Fermi Touchscreen"
-[    52.718] (II) Using input driver 'nextwindow' for 'Nextwindow Fermi Touchscreen'
-[    52.718] (**) Nextwindow Fermi Touchscreen: always reports core events
-[    52.718] (**) Nextwindow Fermi Touchscreen: always reports core events
-[    52.718] (II) Nextwindow Fermi Touchscreen: Using device /dev/input/js0.
-[    52.718] (II) Nextwindow Fermi Touchscreen: Using touch help.
-[    52.770] (II) XINPUT: Adding extended input device "Nextwindow Fermi Touchscreen" (type: UNKNOWN, id 17)
-[    52.770] (**) Nextwindow Fermi Touchscreen: (accel) keeping acceleration scheme 1
-[    52.770] (**) Nextwindow Fermi Touchscreen: (accel) acceleration profile 0
-[    52.770] (**) Nextwindow Fermi Touchscreen: (accel) acceleration factor: 2.000
-[    52.770] (**) Nextwindow Fermi Touchscreen: (accel) acceleration threshold: 4
-[    52.770] (II) Nextwindow Fermi Touchscreen: On.
-[    52.770] (II) config/udev: Adding input device Nextwindow Fermi Touchscreen (/dev/input/mouse3)
-[    52.770] (**) Nextwindow Fermi Touchscreen: Applying InputClass "Nextwindow Fermi Touchscreen"
-[    52.770] (II) Using input driver 'nextwindow' for 'Nextwindow Fermi Touchscreen'
-[    52.770] (**) Nextwindow Fermi Touchscreen: always reports core events
-[    52.770] (**) Nextwindow Fermi Touchscreen: always reports core events
-[    52.770] (II) Nextwindow Fermi Touchscreen: Using device /dev/input/mouse3.
-[    52.770] (II) Nextwindow Fermi Touchscreen: Using touch help.
-[    52.826] (II) XINPUT: Adding extended input device "Nextwindow Fermi Touchscreen" (type: UNKNOWN, id 18)
-[    52.826] (**) Nextwindow Fermi Touchscreen: (accel) keeping acceleration scheme 1
-[    52.826] (**) Nextwindow Fermi Touchscreen: (accel) acceleration profile 0
-[    52.826] (**) Nextwindow Fermi Touchscreen: (accel) acceleration factor: 2.000
-[    52.826] (**) Nextwindow Fermi Touchscreen: (accel) acceleration threshold: 4
-[    52.826] (II) Nextwindow Fermi Touchscreen: On.
-```
+GPL v2
+
+## Credits
+
+- Original driver: Daniel Newton
+- USB protocol analysis and refactoring: Multiple contributors
+- Based on the Linux USB skeleton driver
+
+## Version History
+
+### 2.0.2 (2026-01-27)
+- Complete rewrite with packet parsing
+- Direct Wayland/GNOME support
+- No daemon required
+- Modern multitouch protocol B implementation
+
+### 2.0.0-2.0.1
+- Early refactoring attempts
+- Device initialization working
+- Packet parsing incomplete
+
+### Prior versions
+- Original daemon-based implementation
+- Character device interface
