@@ -204,6 +204,11 @@ GPL v2
 
 ## Version History
 
+### 2.0.5 (2026-01-28)
+- Real Coordinate Parsing
+- Kernel Compatibility Fix (Arch 6.18.6+)
+- Reduced Logging Noise
+
 ### 2.0.4 (2026-01-27)
 - **CRITICAL FIX**: Eliminated start/stop flapping during initialization
 - URBs now run continuously from probe to disconnect
