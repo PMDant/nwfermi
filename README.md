@@ -214,6 +214,11 @@ GPL v2
 - URBs now run continuously from probe to disconnect
 - Stable operation without repeated start/stop cycles
 
+- ## 2.0.3 (2026-01-27)
+- Removed input device open/close callbacks
+- Simplified lifecycle management
+- Added disconnected flag for clean shutdown
+
 ### 2.0.2 (2026-01-27)
 - Complete rewrite with packet parsing
 - Direct Wayland/GNOME support
