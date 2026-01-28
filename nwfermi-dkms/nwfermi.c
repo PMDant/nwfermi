@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.0.6
+ * NextWindow Fermi USB Touchscreen Driver v2.0.7
  * 
- * Fixed coordinate axes and spurious touch filtering
+ * Fixed spurious touch filtering
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -14,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.0.6"
+#define DRIVER_VERSION "2.0.7"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -51,9 +51,10 @@
 #define RAW_Y_MIN              0
 #define RAW_Y_MAX              4500   /* Y range: 0-4500 */
 
-/* Invalid coordinate detection (filter spurious touches) */
-#define RAW_X_INVALID          8500   /* X=8500 indicates no touch */
-#define RAW_Y_INVALID_MIN      4450   /* Y>4450 indicates no touch */
+/* Invalid coordinate detection (filter spurious touches)
+ * Idle packets show extreme/invalid values - filter these out
+ */
+#define RAW_COORD_MAX_VALID    10000  /* Any coord >10000 is invalid */
 
 /* Screen resolution (adjust for your display) */
 #define SCREEN_WIDTH           1366
@@ -113,11 +114,12 @@ static void fermi_parse_touch_packet_by_length(struct fermi_dev *dev, const u8 *
 	raw_y = data[COORD_Y_OFFSET_LSB] | (data[COORD_Y_OFFSET_MSB] << 8);
 	
 	/* Filter spurious "idle" touches
-	 * When not touching: X=8500, Y>4450
-	 * Only process valid touch coordinates
+	 * Idle/invalid packets show extreme values (>10000)
+	 * These appear in debug as raw(18,64778) or raw(61953,61697)
+	 * Only process coordinates within reasonable ranges
 	 */
-	if (raw_x == RAW_X_INVALID || raw_y > RAW_Y_INVALID_MIN) {
-		/* This is an idle packet that snuck through - ignore it */
+	if (raw_x > RAW_COORD_MAX_VALID || raw_y > RAW_COORD_MAX_VALID) {
+		/* This is an idle/garbage packet - ignore it */
 		dev_dbg(&dev->interface->dev,
 			"Filtered spurious touch: raw(%u,%u)\n", raw_x, raw_y);
 		return;
