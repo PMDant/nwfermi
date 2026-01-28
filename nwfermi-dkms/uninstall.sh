@@ -2,7 +2,7 @@
 set -e
 
 PACKAGE_NAME="nwfermi"
-PACKAGE_VERSION="2.0.2"
+PACKAGE_VERSION="2.0.3"
 
 echo "Uninstalling NextWindow Fermi touchscreen driver..."
 

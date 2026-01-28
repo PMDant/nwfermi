@@ -1,5 +1,5 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.0.2
+ * NextWindow Fermi USB Touchscreen Driver v2.0.3
  * 
  * Complete driver with packet decoding based on USB analysis
  * Works directly with Wayland/GNOME - no daemon needed
@@ -13,7 +13,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.0.2"
+#define DRIVER_VERSION "2.0.3"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with packet decoding"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -49,8 +49,8 @@ struct fermi_dev {
 	int                     next_tracking_id;
 	
 	u8                      bulk_in_addr;
-	bool                    opened;
 	struct mutex            mutex;
+	bool                    disconnected;
 };
 
 /* Helper to convert signed 8-bit value to int */
@@ -220,6 +220,10 @@ static void fermi_irq(struct urb *urb)
 	struct fermi_dev *dev = urb->context;
 	int retval;
 	
+	/* Don't resubmit if we're disconnected */
+	if (dev->disconnected)
+		return;
+	
 	switch (urb->status) {
 	case 0:
 		/* Success */
@@ -283,46 +287,10 @@ static void fermi_stop(struct fermi_dev *dev)
 {
 	int i;
 	
+	dev->disconnected = true;
+	
 	for (i = 0; i < FERMI_URB_COUNT; i++)
 		usb_kill_urb(dev->urbs[i]);
-	
-	dev_info(&dev->interface->dev, "Stopped reading touch data\n");
-}
-
-/* Input device open callback */
-static int fermi_input_open(struct input_dev *input)
-{
-	struct fermi_dev *dev = input_get_drvdata(input);
-	int retval;
-	
-	mutex_lock(&dev->mutex);
-	
-	if (!dev->opened) {
-		retval = fermi_start(dev);
-		if (retval) {
-			mutex_unlock(&dev->mutex);
-			return retval;
-		}
-		dev->opened = true;
-	}
-	
-	mutex_unlock(&dev->mutex);
-	return 0;
-}
-
-/* Input device close callback */
-static void fermi_input_close(struct input_dev *input)
-{
-	struct fermi_dev *dev = input_get_drvdata(input);
-	
-	mutex_lock(&dev->mutex);
-	
-	if (dev->opened) {
-		fermi_stop(dev);
-		dev->opened = false;
-	}
-	
-	mutex_unlock(&dev->mutex);
 }
 
 /* USB device table */
@@ -357,6 +325,7 @@ static int fermi_probe(struct usb_interface *intf,
 	dev->interface = intf;
 	mutex_init(&dev->mutex);
 	dev->next_tracking_id = 0;
+	dev->disconnected = false;
 	
 	/* Initialize slot tracking */
 	for (i = 0; i < FERMI_MAX_SLOTS; i++) {
@@ -414,8 +383,6 @@ static int fermi_probe(struct usb_interface *intf,
 	usb_to_input_id(udev, &input->id);
 	
 	input_set_drvdata(input, dev);
-	input->open = fermi_input_open;
-	input->close = fermi_input_close;
 	
 	/* Set up input device capabilities */
 	__set_bit(EV_KEY, input->evbit);
@@ -445,8 +412,19 @@ static int fermi_probe(struct usb_interface *intf,
 	
 	usb_set_intfdata(intf, dev);
 	
+	/* Start reading data immediately */
+	retval = fermi_start(dev);
+	if (retval) {
+		dev_err(&intf->dev, "Failed to start URBs: %d\n", retval);
+		goto error_unregister;
+	}
+	
 	dev_info(&intf->dev, "NextWindow Fermi touchscreen registered successfully\n");
 	return 0;
+
+error_unregister:
+	input_unregister_device(input);
+	input = NULL;  /* Don't free it again */
 	
 error:
 	if (input)
@@ -472,11 +450,12 @@ static void fermi_disconnect(struct usb_interface *intf)
 	
 	usb_set_intfdata(intf, NULL);
 	
-	input_unregister_device(dev->input);
-	
+	/* Mark as disconnected and stop URBs */
 	mutex_lock(&dev->mutex);
 	fermi_stop(dev);
 	mutex_unlock(&dev->mutex);
+	
+	input_unregister_device(dev->input);
 	
 	for (i = 0; i < FERMI_URB_COUNT; i++) {
 		usb_free_urb(dev->urbs[i]);
@@ -493,11 +472,11 @@ static void fermi_disconnect(struct usb_interface *intf)
 static int fermi_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct fermi_dev *dev = usb_get_intfdata(intf);
+	int i;
 	
-	mutex_lock(&dev->mutex);
-	if (dev->opened)
-		fermi_stop(dev);
-	mutex_unlock(&dev->mutex);
+	/* Kill URBs during suspend */
+	for (i = 0; i < FERMI_URB_COUNT; i++)
+		usb_kill_urb(dev->urbs[i]);
 	
 	return 0;
 }
@@ -505,12 +484,12 @@ static int fermi_suspend(struct usb_interface *intf, pm_message_t message)
 static int fermi_resume(struct usb_interface *intf)
 {
 	struct fermi_dev *dev = usb_get_intfdata(intf);
-	int retval = 0;
+	int retval;
 	
-	mutex_lock(&dev->mutex);
-	if (dev->opened)
-		retval = fermi_start(dev);
-	mutex_unlock(&dev->mutex);
+	/* Restart URBs after resume */
+	retval = fermi_start(dev);
+	if (retval)
+		dev_err(&intf->dev, "Failed to restart after resume: %d\n", retval);
 	
 	return retval;
 }
