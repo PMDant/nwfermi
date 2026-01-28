@@ -1,4 +1,4 @@
-# NextWindow Fermi Touchscreen Driver v2.0.5
+# NextWindow Fermi Touchscreen Driver v2.0.6
 
 A modern Linux kernel driver for NextWindow Fermi USB touchscreens, designed to work directly with Wayland/GNOME without requiring a userspace daemon.
 
@@ -30,10 +30,10 @@ sudo modprobe nwfermi
 
 ```bash
 # Install to DKMS
-sudo cp -r nwfermi-2.0.5 /usr/src/
-sudo dkms add -m nwfermi -v 2.0.5
-sudo dkms build -m nwfermi -v 2.0.5
-sudo dkms install -m nwfermi -v 2.0.5
+sudo cp -r nwfermi-2.0.6 /usr/src/
+sudo dkms add -m nwfermi -v 2.0.6
+sudo dkms build -m nwfermi -v 2.0.6
+sudo dkms install -m nwfermi -v 2.0.6
 
 # Load the module
 sudo modprobe nwfermi
@@ -189,7 +189,7 @@ sudo ./uninstall.sh
 
 ```bash
 sudo rmmod nwfermi
-sudo dkms remove -m nwfermi -v 2.0.5 --all
+sudo dkms remove -m nwfermi -v 2.0.6 --all
 ```
 
 ## License
@@ -203,6 +203,11 @@ GPL v2
 - Based on the Linux USB skeleton driver
 
 ## Version History
+
+### 2.0.6 (2026-01-28)
+- Correct Y Coordinate Bytes
+- Inverted Coordinates
+- Spurious Touch Filtering
 
 ### 2.0.5 (2026-01-28)
 - Real Coordinate Parsing
