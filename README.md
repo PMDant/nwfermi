@@ -19,7 +19,7 @@ A modern Linux kernel driver for NextWindow Fermi USB touchscreens, designed to 
 
 ## Installation
 
-### Quick Install
+### Quick Install YMMV
 
 ```bash
 sudo ./install.sh
@@ -30,10 +30,10 @@ sudo modprobe nwfermi
 
 ```bash
 # Install to DKMS
-sudo cp -r nwfermi-2.0.4 /usr/src/
-sudo dkms add -m nwfermi -v 2.0.4
-sudo dkms build -m nwfermi -v 2.0.4
-sudo dkms install -m nwfermi -v 2.0.4
+sudo cp -r nwfermi-2.0.5 /usr/src/
+sudo dkms add -m nwfermi -v 2.0.5
+sudo dkms build -m nwfermi -v 2.0.5
+sudo dkms install -m nwfermi -v 2.0.5
 
 # Load the module
 sudo modprobe nwfermi
@@ -179,6 +179,8 @@ If you have a NextWindow device and can help improve the packet parsing:
 
 ## Uninstallation
 
+Automatically: YMMV
+
 ```bash
 sudo ./uninstall.sh
 ```
@@ -187,7 +189,7 @@ Or manually:
 
 ```bash
 sudo rmmod nwfermi
-sudo dkms remove -m nwfermi -v 2.0.4 --all
+sudo dkms remove -m nwfermi -v 2.0.5 --all
 ```
 
 ## License
