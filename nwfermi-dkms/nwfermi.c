@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.0.5
+ * NextWindow Fermi USB Touchscreen Driver v2.0.6
  * 
- * Real coordinate decoding and touch detection
+ * Fixed coordinate axes and spurious touch filtering
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -14,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.0.5"
+#define DRIVER_VERSION "2.0.6"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -46,10 +46,14 @@
 #define COORD_Y_OFFSET_MSB     29
 
 /* Raw coordinate ranges (from device) */
-#define RAW_X_MIN              0
-#define RAW_X_MAX              8500   /* Observed range ~250-8500 */
+#define RAW_X_MIN              250
+#define RAW_X_MAX              8500   /* X range: 250-8500 */
 #define RAW_Y_MIN              0
-#define RAW_Y_MAX              4500    /* Observed range ~200-350 */
+#define RAW_Y_MAX              4500   /* Y range: 0-4500 */
+
+/* Invalid coordinate detection (filter spurious touches) */
+#define RAW_X_INVALID          8500   /* X=8500 indicates no touch */
+#define RAW_Y_INVALID_MIN      4450   /* Y>4450 indicates no touch */
 
 /* Screen resolution (adjust for your display) */
 #define SCREEN_WIDTH           1366
@@ -102,24 +106,36 @@ static void fermi_parse_touch_packet_by_length(struct fermi_dev *dev, const u8 *
 	}
 	
 	/* Extract coordinates (little-endian 16-bit values)
-	 * Based on analysis:
-	 * - Bytes 24-25: X coordinate (LSB first) - range ~250-8500
-	 * - Bytes 20-21: Y coordinate (LSB first) - range ~200-350
+	 * - Bytes 24-25: X coordinate (LSB first) - range 250-8500
+	 * - Bytes 28-29: Y coordinate (LSB first) - range 0-4500
 	 */
 	raw_x = data[COORD_X_OFFSET_LSB] | (data[COORD_X_OFFSET_MSB] << 8);
 	raw_y = data[COORD_Y_OFFSET_LSB] | (data[COORD_Y_OFFSET_MSB] << 8);
 	
-	/* Scale to screen resolution
-	 * X: 250-8500 → 0-1366
-	 * Y: 200-350 → 0-768
+	/* Filter spurious "idle" touches
+	 * When not touching: X=8500, Y>4450
+	 * Only process valid touch coordinates
 	 */
+	if (raw_x == RAW_X_INVALID || raw_y > RAW_Y_INVALID_MIN) {
+		/* This is an idle packet that snuck through - ignore it */
+		dev_dbg(&dev->interface->dev,
+			"Filtered spurious touch: raw(%u,%u)\n", raw_x, raw_y);
+		return;
+	}
+	
+	/* Clamp to valid ranges */
 	if (raw_x < RAW_X_MIN) raw_x = RAW_X_MIN;
 	if (raw_x > RAW_X_MAX) raw_x = RAW_X_MAX;
 	if (raw_y < RAW_Y_MIN) raw_y = RAW_Y_MIN;
 	if (raw_y > RAW_Y_MAX) raw_y = RAW_Y_MAX;
 	
-	screen_x = ((raw_x - RAW_X_MIN) * SCREEN_WIDTH) / (RAW_X_MAX - RAW_X_MIN);
-	screen_y = ((raw_y - RAW_Y_MIN) * SCREEN_HEIGHT) / (RAW_Y_MAX - RAW_Y_MIN);
+	/* Scale to screen resolution and INVERT both axes
+	 * The touchscreen appears to be mounted upside-down/backwards
+	 * X: 250-8500 → 1366-0 (inverted)
+	 * Y: 0-4500 → 768-0 (inverted)
+	 */
+	screen_x = SCREEN_WIDTH - ((raw_x - RAW_X_MIN) * SCREEN_WIDTH) / (RAW_X_MAX - RAW_X_MIN);
+	screen_y = SCREEN_HEIGHT - ((raw_y - RAW_Y_MIN) * SCREEN_HEIGHT) / (RAW_Y_MAX - RAW_Y_MIN);
 	
 	/* Clamp to screen bounds */
 	if (screen_x < 0) screen_x = 0;
