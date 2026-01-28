@@ -1,5 +1,5 @@
 #!/bin/bash
-# Upgrade from 2.0.2 to 2.0.3 - fixes start/stop flapping
+# Upgrade nwfermi
 
 set -e
 
@@ -8,16 +8,16 @@ if [ "$(id -u)" != "0" ]; then
    exit 1
 fi
 
-echo "Upgrading to 2.0.3 (fixes flapping issue)..."
+echo "Upgrading nwfermi..."
 
 # Unload and remove old
 rmmod nwfermi 2>/dev/null || true
-dkms remove -m nwfermi -v 2.0.2 --all 2>/dev/null || true
+dkms remove -m nwfermi -v 2.0.4 --all 2>/dev/null || true
 
 # Install new
-dkms add -m nwfermi -v 2.0.3
-dkms build -m nwfermi -v 2.0.3
-dkms install -m nwfermi -v 2.0.3
+dkms add -m nwfermi -v 2.0.5
+dkms build -m nwfermi -v 2.0.5
+dkms install -m nwfermi -v 2.0.5
 modprobe nwfermi
 
 echo "Done! Check: journalctl -b | grep nwfermi | tail"
