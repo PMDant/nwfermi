@@ -1,4 +1,4 @@
-# NextWindow Fermi Touchscreen Driver v2.0.4
+# NextWindow Fermi Touchscreen Driver v2.0.5
 
 A modern Linux kernel driver for NextWindow Fermi USB touchscreens, designed to work directly with Wayland/GNOME without requiring a userspace daemon.
 
