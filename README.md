@@ -113,14 +113,14 @@ less /tmp/usb_capture.log
 4. **Enable debug output** (see Debugging section above)
 5. **Check for conflicts**: `lsmod | grep -i touch` - look for other touchscreen drivers
 
-### Python shim still needed?
+### NWFWEMI-daemon & Python shim still needed?
 
-This driver should completely replace the need for the Python shim. If you still have the shim running:
+This driver should completely replace the need for the daemon and Python shim. If you still have them running:
 
 ```bash
-# Find and stop the shim process
+# Find and stop the shim process then the daemon process
 ps aux | grep nwfermi
-sudo killall -9 python3  # or kill specific PID
+sudo systemctl stop nwfermi-* # may not glob services
 
 # Disable the shim from starting automatically
 sudo systemctl disable nwfermi-shim  # if it's a service
@@ -179,13 +179,13 @@ If you have a NextWindow device and can help improve the packet parsing:
 
 ## Uninstallation
 
-Automatically: YMMV
+### Automatically: YMMV
 
 ```bash
 sudo ./uninstall.sh
 ```
 
-Or manually:
+### Or manually:
 
 ```bash
 sudo rmmod nwfermi
