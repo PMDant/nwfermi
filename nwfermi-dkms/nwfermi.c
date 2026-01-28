@@ -42,14 +42,14 @@
 /* Coordinate extraction - discovered from usbmon data */
 #define COORD_X_OFFSET_LSB     24    /* X coordinate: bytes 24-25 (little-endian) */
 #define COORD_X_OFFSET_MSB     25
-#define COORD_Y_OFFSET_LSB     20    /* Y coordinate: bytes 20-21 (little-endian) */
-#define COORD_Y_OFFSET_MSB     21
+#define COORD_Y_OFFSET_LSB     28    /* Y coordinate: bytes 28-29 (little-endian) */
+#define COORD_Y_OFFSET_MSB     29
 
 /* Raw coordinate ranges (from device) */
 #define RAW_X_MIN              0
 #define RAW_X_MAX              8500   /* Observed range ~250-8500 */
 #define RAW_Y_MIN              0
-#define RAW_Y_MAX              350    /* Observed range ~200-350 */
+#define RAW_Y_MAX              4500    /* Observed range ~200-350 */
 
 /* Screen resolution (adjust for your display) */
 #define SCREEN_WIDTH           1366
