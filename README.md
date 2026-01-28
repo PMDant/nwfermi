@@ -113,7 +113,7 @@ less /tmp/usb_capture.log
 4. **Enable debug output** (see Debugging section above)
 5. **Check for conflicts**: `lsmod | grep -i touch` - look for other touchscreen drivers
 
-### NWFWEMI-daemon & Python shim still needed?
+### nwfermi-daemon & Python shim still needed?
 
 This driver should completely replace the need for the daemon and Python shim. If you still have them running:
 
