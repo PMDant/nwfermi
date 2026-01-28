@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.0.4
+ * NextWindow Fermi USB Touchscreen Driver v2.0.5
  * 
- * Length-based touch detection with coordinate extraction
+ * Real coordinate decoding and touch detection
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -10,10 +10,11 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/usb.h>
+#include <linux/usb/input.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.0.4"
+#define DRIVER_VERSION "2.0.5"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -37,6 +38,22 @@
 /* Packet type identifiers (byte 3 of packet) */
 #define PACKET_TYPE_01         0x01  /* Main data stream */
 #define PACKET_TYPE_STATUS     0x09  /* Large status packets (2471 bytes) */
+
+/* Coordinate extraction - discovered from usbmon data */
+#define COORD_X_OFFSET_LSB     24    /* X coordinate: bytes 24-25 (little-endian) */
+#define COORD_X_OFFSET_MSB     25
+#define COORD_Y_OFFSET_LSB     20    /* Y coordinate: bytes 20-21 (little-endian) */
+#define COORD_Y_OFFSET_MSB     21
+
+/* Raw coordinate ranges (from device) */
+#define RAW_X_MIN              0
+#define RAW_X_MAX              8500   /* Observed range ~250-8500 */
+#define RAW_Y_MIN              0
+#define RAW_Y_MAX              350    /* Observed range ~200-350 */
+
+/* Screen resolution (adjust for your display) */
+#define SCREEN_WIDTH           1366
+#define SCREEN_HEIGHT          768
 
 /* Device structure */
 struct fermi_dev {
@@ -70,96 +87,69 @@ static inline int s8_to_int(u8 val)
 	return (val & 0x80) ? (int)val - 256 : (int)val;
 }
 
-/* Dump hex data for analysis (only when touch detected) */
-static void dump_packet_hex(struct device *dev, const u8 *data, int len, const char *label)
-{
-	int i;
-	char hex_buf[256];
-	int pos = 0;
-	
-	/* Print first 64 bytes in groups of 8 */
-	for (i = 0; i < min(64, len) && pos < sizeof(hex_buf) - 3; i++) {
-		if (i > 0 && (i % 8) == 0) {
-			dev_info(dev, "%s [%02d-%02d]: %s\n", label, i-8, i-1, hex_buf);
-			pos = 0;
-		}
-		pos += snprintf(hex_buf + pos, sizeof(hex_buf) - pos, "%02x ", data[i]);
-	}
-	if (pos > 0)
-		dev_info(dev, "%s [%02d-%02d]: %s\n", label, (i-1)/8*8, i-1, hex_buf);
-}
-
 /* Parse touch packet using length-based detection */
 static void fermi_parse_touch_packet_by_length(struct fermi_dev *dev, const u8 *data, int len)
 {
-	/* The extra bytes (beyond the 478-byte baseline) contain touch data
-	 * We need to extract and decode these bytes to get coordinates
-	 * 
-	 * From usbmon analysis:
-	 * - Idle packets: 478-486 bytes (cycling through 478, 486, 479, 483)
-	 * - Touch packets: 488-493 bytes (8-15 bytes longer)
-	 * 
-	 * The extra bytes appear around offset 16-32 based on packet type
-	 * Packet structure shows data fields like:
-	 *   00006e80 015b22f3 04fee810 0d06f60d
-	 *   00005d80 00ce1413 16132709 0715f7e3
-	 * 
-	 * These likely contain:
-	 * - Touch point identifiers
-	 * - X/Y coordinates (possibly 16-bit values)
-	 * - Pressure or other metadata
-	 */
-	
-	int extra_bytes = len - PACKET_LEN_IDLE_MIN;
 	int slot = 0;  /* For now, assume single touch */
+	u16 raw_x, raw_y;
+	int screen_x, screen_y;
 	
-	if (extra_bytes <= 0) {
+	/* Validate packet length */
+	if (len < 32) {
 		dev_err(&dev->interface->dev, 
-			"Logic error: touch packet with no extra bytes (len=%d)\n", len);
+			"Touch packet too short: len=%d\n", len);
 		return;
 	}
 	
-	/* Dump the packet for analysis */
-	dev_info(&dev->interface->dev,
-		"=== TOUCH PACKET: len=%d, extra_bytes=%d ===\n", 
-		len, extra_bytes);
-	dump_packet_hex(&dev->interface->dev, data, len, "RAW");
-	
-	/* Try to extract coordinates from the data
-	 * Looking at byte offset 16-32 where touch data appears
+	/* Extract coordinates (little-endian 16-bit values)
+	 * Based on analysis:
+	 * - Bytes 24-25: X coordinate (LSB first) - range ~250-8500
+	 * - Bytes 20-21: Y coordinate (LSB first) - range ~200-350
 	 */
-	if (len >= 32) {
-		u16 val1, val2, val3, val4;
-		
-		/* Extract some 16-bit values from different offsets */
-		val1 = (data[16] << 8) | data[17];  /* Offset 16-17 */
-		val2 = (data[20] << 8) | data[21];  /* Offset 20-21 */
-		val3 = (data[24] << 8) | data[25];  /* Offset 24-25 */
-		val4 = (data[28] << 8) | data[29];  /* Offset 28-29 */
-		
-		dev_info(&dev->interface->dev,
-			"Potential coords: [16-17]=0x%04x=%d [20-21]=0x%04x=%d [24-25]=0x%04x=%d [28-29]=0x%04x=%d\n",
-			val1, val1, val2, val2, val3, val3, val4, val4);
-	}
+	raw_x = data[COORD_X_OFFSET_LSB] | (data[COORD_X_OFFSET_MSB] << 8);
+	raw_y = data[COORD_Y_OFFSET_LSB] | (data[COORD_Y_OFFSET_MSB] << 8);
 	
-	/* For now, just report a touch event at center screen to verify input system works */
+	/* Scale to screen resolution
+	 * X: 250-8500 → 0-1366
+	 * Y: 200-350 → 0-768
+	 */
+	if (raw_x < RAW_X_MIN) raw_x = RAW_X_MIN;
+	if (raw_x > RAW_X_MAX) raw_x = RAW_X_MAX;
+	if (raw_y < RAW_Y_MIN) raw_y = RAW_Y_MIN;
+	if (raw_y > RAW_Y_MAX) raw_y = RAW_Y_MAX;
+	
+	screen_x = ((raw_x - RAW_X_MIN) * SCREEN_WIDTH) / (RAW_X_MAX - RAW_X_MIN);
+	screen_y = ((raw_y - RAW_Y_MIN) * SCREEN_HEIGHT) / (RAW_Y_MAX - RAW_Y_MIN);
+	
+	/* Clamp to screen bounds */
+	if (screen_x < 0) screen_x = 0;
+	if (screen_x >= SCREEN_WIDTH) screen_x = SCREEN_WIDTH - 1;
+	if (screen_y < 0) screen_y = 0;
+	if (screen_y >= SCREEN_HEIGHT) screen_y = SCREEN_HEIGHT - 1;
+	
+	/* Scale to input device range (0-32767) */
+	dev->abs_x[slot] = (screen_x * FERMI_MAX_X) / SCREEN_WIDTH;
+	dev->abs_y[slot] = (screen_y * FERMI_MAX_Y) / SCREEN_HEIGHT;
+	
+	/* Report touch event */
 	if (!dev->slot_active[slot]) {
 		dev->tracking_id[slot] = dev->next_tracking_id++;
 		dev->slot_active[slot] = true;
 		
-		/* Report touch down at center of screen */
-		dev->abs_x[slot] = FERMI_MAX_X / 2;
-		dev->abs_y[slot] = FERMI_MAX_Y / 2;
-		
 		input_mt_slot(dev->input, slot);
 		input_mt_report_slot_state(dev->input, MT_TOOL_FINGER, true);
 		input_report_abs(dev->input, ABS_MT_TRACKING_ID, dev->tracking_id[slot]);
-		input_report_abs(dev->input, ABS_MT_POSITION_X, dev->abs_x[slot]);
-		input_report_abs(dev->input, ABS_MT_POSITION_Y, dev->abs_y[slot]);
-		input_sync(dev->input);
-		
-		dev_info(&dev->interface->dev, "Touch DOWN at center (diagnostic)\n");
 	}
+	
+	/* Always update position */
+	input_mt_slot(dev->input, slot);
+	input_report_abs(dev->input, ABS_MT_POSITION_X, dev->abs_x[slot]);
+	input_report_abs(dev->input, ABS_MT_POSITION_Y, dev->abs_y[slot]);
+	input_sync(dev->input);
+	
+	dev_dbg(&dev->interface->dev,
+		"Touch: raw(%u,%u) → screen(%d,%d) → abs(%d,%d)\n",
+		raw_x, raw_y, screen_x, screen_y, dev->abs_x[slot], dev->abs_y[slot]);
 }
 
 /* Release all active touches */
@@ -173,7 +163,7 @@ static void fermi_release_all_touches(struct fermi_dev *dev)
 			input_mt_report_slot_state(dev->input, MT_TOOL_FINGER, false);
 			dev->slot_active[i] = false;
 			
-			dev_info(&dev->interface->dev, "Touch UP slot %d (diagnostic)\n", i);
+			dev_dbg(&dev->interface->dev, "Touch UP slot %d\n", i);
 		}
 	}
 	input_sync(dev->input);
@@ -213,13 +203,7 @@ static void fermi_process_packet(struct fermi_dev *dev, const u8 *data, int len)
 	if (is_touch) {
 		dev->packet_count_touch++;
 		
-		/* Only log on length changes to reduce spam */
-		if (len != dev->last_packet_len || dev->packet_count_touch == 1) {
-			dev_info(&dev->interface->dev,
-				"Touch packet detected: len=%d (was %d)\n",
-				len, dev->last_packet_len);
-		}
-		
+		/* Parse and report the touch */
 		fermi_parse_touch_packet_by_length(dev, data, len);
 		dev->last_packet_len = len;
 		
@@ -229,8 +213,8 @@ static void fermi_process_packet(struct fermi_dev *dev, const u8 *data, int len)
 		/* Release any active touches when returning to idle */
 		fermi_release_all_touches(dev);
 		
-		/* Only log occasionally to avoid spam */
-		if (dev->packet_count_idle % 1000 == 0) {
+		/* Log stats occasionally */
+		if (dev->packet_count_idle % 5000 == 0) {
 			dev_info(&dev->interface->dev,
 				"Stats: total=%lu idle=%lu touch=%lu\n",
 				dev->packet_count_total,
@@ -241,7 +225,7 @@ static void fermi_process_packet(struct fermi_dev *dev, const u8 *data, int len)
 		dev->last_packet_len = len;
 	} else {
 		/* Unexpected packet length */
-		dev_warn(&dev->interface->dev,
+		dev_dbg(&dev->interface->dev,
 			"Unexpected packet length: %d (type=0x%02x)\n",
 			len, packet_type);
 	}
@@ -422,7 +406,7 @@ static int fermi_probe(struct usb_interface *intf,
 	__set_bit(EV_ABS, input->evbit);
 	__set_bit(BTN_TOUCH, input->keybit);
 	
-	input_set_prop(input, INPUT_PROP_DIRECT);
+	__set_bit(INPUT_PROP_DIRECT, input->propbit);
 	
 	/* Single-touch axes (for compatibility) */
 	input_set_abs_params(input, ABS_X, 0, FERMI_MAX_X, 0, 0);
