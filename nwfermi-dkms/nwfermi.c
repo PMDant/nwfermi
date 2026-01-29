@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.0.8
+ * NextWindow Fermi USB Touchscreen Driver v2.0.9
  * 
- * Strict coordinate validation to filter garbage packets
+ * Adjusted coordinate validation bounds for full coverage
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -14,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.0.8"
+#define DRIVER_VERSION "2.0.9"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -46,19 +46,20 @@
 #define COORD_Y_OFFSET_MSB     29
 
 /* Raw coordinate ranges (from device) */
-#define RAW_X_MIN              200    /* Actual observed minimum */
-#define RAW_X_MAX              8600   /* Actual observed maximum */
+#define RAW_X_MIN              250    /* Actual observed minimum */
+#define RAW_X_MAX              8500   /* Actual observed maximum */
 #define RAW_Y_MIN              0      /* Actual observed minimum */
-#define RAW_Y_MAX              4600   /* Actual observed maximum */
+#define RAW_Y_MAX              5400   /* Actual observed maximum (expanded) */
 
 /* Coordinate validation - STRICT bounds checking
  * Any coordinate outside these ranges is garbage data
- * Based on observed valid range: X(200-8600), Y(0-4600)
+ * Observed valid touches: X(250-8500), Y(0-5400)
+ * Allow minimal margin while blocking 60000+ garbage values
  */
-#define RAW_X_VALID_MIN        200
-#define RAW_X_VALID_MAX        9000   /* Allow some margin */
+#define RAW_X_VALID_MIN        250    /* Tightened - very low X values are garbage */
+#define RAW_X_VALID_MAX        9000   /* Allow some margin above max */
 #define RAW_Y_VALID_MIN        0
-#define RAW_Y_VALID_MAX        5000   /* Allow some margin */
+#define RAW_Y_VALID_MAX        6000   /* Expanded to capture full Y range */
 
 /* Screen resolution (adjust for your display) */
 #define SCREEN_WIDTH           1366
