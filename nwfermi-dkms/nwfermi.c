@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.1.3
+ * NextWindow Fermi USB Touchscreen Driver v2.1.4
  * 
- * Testing different axis inversion (Y inverted, X normal)
+ * Both axes inverted - touchscreen rotated 180°
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -14,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.1.3"
+#define DRIVER_VERSION "2.1.4"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -140,10 +140,11 @@ static void fermi_parse_touch_packet_by_length(struct fermi_dev *dev, const u8 *
 	if (raw_y > RAW_Y_MAX) raw_y = RAW_Y_MAX;
 	
 	/* Scale to screen resolution
-	 * Testing: X NORMAL, Y INVERTED
-	 * This is to test if touchscreen is oriented differently
+	 * BOTH AXES INVERTED - touchscreen is mounted upside-down (rotated 180°)
+	 * X: raw 250→screen 1366, raw 8500→screen 0
+	 * Y: raw 0→screen 768, raw 5400→screen 0
 	 */
-	screen_x = ((raw_x - RAW_X_MIN) * SCREEN_WIDTH) / (RAW_X_MAX - RAW_X_MIN);
+	screen_x = SCREEN_WIDTH - ((raw_x - RAW_X_MIN) * SCREEN_WIDTH) / (RAW_X_MAX - RAW_X_MIN);
 	screen_y = SCREEN_HEIGHT - ((raw_y - RAW_Y_MIN) * SCREEN_HEIGHT) / (RAW_Y_MAX - RAW_Y_MIN);
 	
 	/* Clamp to screen bounds */
