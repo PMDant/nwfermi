@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.1.4
+ * NextWindow Fermi USB Touchscreen Driver v2.1.5
  * 
- * Both axes inverted - touchscreen rotated 180°
+ * Testing swapped X/Y byte coordinates
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -14,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.1.4"
+#define DRIVER_VERSION "2.1.5"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -40,26 +40,24 @@
 #define PACKET_TYPE_STATUS     0x09  /* Large status packets (2471 bytes) */
 
 /* Coordinate extraction - discovered from usbmon data */
-#define COORD_X_OFFSET_LSB     24    /* X coordinate: bytes 24-25 (little-endian) */
-#define COORD_X_OFFSET_MSB     25
-#define COORD_Y_OFFSET_LSB     28    /* Y coordinate: bytes 28-29 (little-endian) */
-#define COORD_Y_OFFSET_MSB     29
+#define COORD_X_OFFSET_LSB     28    /* SWAPPED: X coordinate might be bytes 28-29 */
+#define COORD_X_OFFSET_MSB     29
+#define COORD_Y_OFFSET_LSB     24    /* SWAPPED: Y coordinate might be bytes 24-25 */
+#define COORD_Y_OFFSET_MSB     25
 
-/* Raw coordinate ranges (from device) */
-#define RAW_X_MIN              250    /* Actual observed minimum */
-#define RAW_X_MAX              8500   /* Actual observed maximum */
-#define RAW_Y_MIN              0      /* Actual observed minimum */
-#define RAW_Y_MAX              5400   /* Actual observed maximum (expanded) */
+/* Raw coordinate ranges (from device) - SWAPPED */
+#define RAW_X_MIN              0      /* X range after swap */
+#define RAW_X_MAX              5400   
+#define RAW_Y_MIN              250    /* Y range after swap */
+#define RAW_Y_MAX              8500   
 
 /* Coordinate validation - STRICT bounds checking
- * Any coordinate outside these ranges is garbage data
- * Observed valid touches: X(250-8500), Y(0-5400)
- * Allow minimal margin while blocking 60000+ garbage values
+ * SWAPPED: X is now 0-5400, Y is now 250-8500
  */
-#define RAW_X_VALID_MIN        250    /* Tightened - very low X values are garbage */
-#define RAW_X_VALID_MAX        9000   /* Allow some margin above max */
-#define RAW_Y_VALID_MIN        0
-#define RAW_Y_VALID_MAX        6000   /* Expanded to capture full Y range */
+#define RAW_X_VALID_MIN        0
+#define RAW_X_VALID_MAX        6000   
+#define RAW_Y_VALID_MIN        250    
+#define RAW_Y_VALID_MAX        9000   
 
 /* Screen resolution (adjust for your display) */
 #define SCREEN_WIDTH           1366
