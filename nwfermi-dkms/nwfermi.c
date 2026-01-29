@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.1.0
+ * NextWindow Fermi USB Touchscreen Driver v2.1.1
  * 
- * Fixed Y-axis inversion direction
+ * Added BTN_TOUCH reporting for click compatibility
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -14,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.1.0"
+#define DRIVER_VERSION "2.1.1"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -170,6 +170,14 @@ static void fermi_parse_touch_packet_by_length(struct fermi_dev *dev, const u8 *
 	input_mt_slot(dev->input, slot);
 	input_report_abs(dev->input, ABS_MT_POSITION_X, dev->abs_x[slot]);
 	input_report_abs(dev->input, ABS_MT_POSITION_Y, dev->abs_y[slot]);
+	
+	/* Report legacy single-touch events for compatibility
+	 * Some desktop environments expect these for click events
+	 */
+	input_report_key(dev->input, BTN_TOUCH, 1);
+	input_report_abs(dev->input, ABS_X, dev->abs_x[slot]);
+	input_report_abs(dev->input, ABS_Y, dev->abs_y[slot]);
+	
 	input_sync(dev->input);
 	
 	dev_dbg(&dev->interface->dev,
@@ -191,6 +199,10 @@ static void fermi_release_all_touches(struct fermi_dev *dev)
 			dev_dbg(&dev->interface->dev, "Touch UP slot %d\n", i);
 		}
 	}
+	
+	/* Release BTN_TOUCH for legacy single-touch compatibility */
+	input_report_key(dev->input, BTN_TOUCH, 0);
+	
 	input_sync(dev->input);
 }
 
