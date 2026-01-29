@@ -1,8 +1,7 @@
-# Testing and Configuration Guide - v2.0.5
-
+# Testing and Configuration Guide
 ## Quick Start
 
-After installing v2.0.5, your touchscreen should work immediately. Try:
+After installing nwfermi, your touchscreen should work immediately. Try:
 - Drawing in an app like GIMP or Krita
 - Scrolling through web pages
 - Clicking buttons in GNOME
