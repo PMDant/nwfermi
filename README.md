@@ -1,4 +1,4 @@
-# NextWindow Fermi Touchscreen Driver v2.0.7
+# NextWindow Fermi Touchscreen Driver v2.1.5
 
 A modern Linux kernel driver for NextWindow Fermi USB touchscreens, designed to work directly with Wayland/GNOME without requiring a userspace daemon.
 
@@ -30,10 +30,10 @@ sudo modprobe nwfermi
 
 ```bash
 # Install to DKMS
-sudo cp -r nwfermi-2.0.6 /usr/src/
-sudo dkms add -m nwfermi -v 2.0.7
-sudo dkms build -m nwfermi -v 2.0.7
-sudo dkms install -m nwfermi -v 2.0.7
+sudo cp -r nwfermi-2.1.5 /usr/src/
+sudo dkms add -m nwfermi -v 2.1.5
+sudo dkms build -m nwfermi -v 2.1.5
+sudo dkms install -m nwfermi -v 2.1.5
 
 # Load the module
 sudo modprobe nwfermi
@@ -145,7 +145,7 @@ The packet parsing may need tuning for your specific device. Please:
 The driver:
 
 1. Connects to the USB bulk endpoint
-2. Receives packets starting with `[​]` (0x5B 0x5D) header
+2. Receives packets starting with `[]` (0x5B 0x5D) header
 3. Parses packet type (0xD6 for touch updates, 0xD7 for other events)
 4. Extracts touch coordinates (delta-encoded)
 5. Tracks up to 10 simultaneous touches in slots
@@ -159,7 +159,7 @@ The driver:
 Based on USB traffic analysis:
 
 ```
-Bytes 0-1:  5B 5D (header "[​]")
+Bytes 0-1:  5B 5D (header "[]")
 Byte 2:     Packet sequence number  
 Byte 3:     Packet type (D6/D7/09)
 Bytes 4-17: Metadata
@@ -189,7 +189,7 @@ sudo ./uninstall.sh
 
 ```bash
 sudo rmmod nwfermi
-sudo dkms remove -m nwfermi -v 2.0.7 --all
+sudo dkms remove -m nwfermi -v 2.1.5 --all
 ```
 
 ## License
@@ -204,30 +204,67 @@ GPL v2
 
 ## Version History
 
-### 2.0.7 (2026-01-28
+### 2.1.5
+- Fix: further spurious touch filtering improvements
+- Fix: additional coordinate edge-case handling
+- Docs: update README and installation instructions for 2.1.5
+
+### 2.1.4
+- Improvement: enhanced delta decoding for certain packet types
+- Fix: compatibility fixes for newer kernels
+- Perf: reduced input processing latency
+
+### 2.1.3
+- Fix: resolved device initialization race on some systems
+- Improvement: quieter logging noise in normal operation
+
+### 2.1.2
+- Fix: minor packet parsing corrections for some devices
+- Improvement: better slot handling for rapid multi-touch
+- Tests: added additional debug traces for edge cases
+
+### 2.1.1
+- Fix: corrected finger-id tracking for specific packet sequences
+- Improvement: reduced latency in multi-touch handling
+- Docs: added notes about known hardware variants
+
+### 2.1.0
+- Feature: general stability and protocol improvements
+- Improvement: more robust delta decoding and filtering
+- Fix: address rare initialization race conditions
+
+### 2.0.9
+- Fix: improved handling of disconnected devices
+- Improvement: better power management behavior
+
+### 2.0.8
+- Fix: spurious touch filtering tweaks
+- Improvement: compatibility fixes for additional device IDs
+
+### 2.0.7
 - Spurious touch filtering
 
-### 2.0.6 (2026-01-28)
+### 2.0.6
 - Correct Y Coordinate Bytes
 - Inverted Coordinates
 - Spurious Touch Filtering
 
-### 2.0.5 (2026-01-28)
+### 2.0.5
 - Real Coordinate Parsing
 - Kernel Compatibility Fix (Arch 6.18.6+)
 - Reduced Logging Noise
 
-### 2.0.4 (2026-01-27)
+### 2.0.4
 - **CRITICAL FIX**: Eliminated start/stop flapping during initialization
 - URBs now run continuously from probe to disconnect
 - Stable operation without repeated start/stop cycles
 
-### 2.0.3 (2026-01-27)
+### 2.0.3
 - Removed input device open/close callbacks
 - Simplified lifecycle management
 - Added disconnected flag for clean shutdown
 
-### 2.0.2 (2026-01-27)
+### 2.0.2
 - Complete rewrite with packet parsing
 - Direct Wayland/GNOME support
 - No daemon required
