@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.1.1
+ * NextWindow Fermi USB Touchscreen Driver v2.1.2
  * 
- * Added BTN_TOUCH reporting for click compatibility
+ * Enhanced touch event debugging and BTN_TOUCH handling
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -14,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.1.1"
+#define DRIVER_VERSION "2.1.2"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -164,6 +164,8 @@ static void fermi_parse_touch_packet_by_length(struct fermi_dev *dev, const u8 *
 		input_mt_slot(dev->input, slot);
 		input_mt_report_slot_state(dev->input, MT_TOOL_FINGER, true);
 		input_report_abs(dev->input, ABS_MT_TRACKING_ID, dev->tracking_id[slot]);
+		
+		dev_info(&dev->interface->dev, "TOUCH DOWN: slot=%d", slot);
 	}
 	
 	/* Always update position */
@@ -189,21 +191,24 @@ static void fermi_parse_touch_packet_by_length(struct fermi_dev *dev, const u8 *
 static void fermi_release_all_touches(struct fermi_dev *dev)
 {
 	int i;
+	bool had_touches = false;
 	
 	for (i = 0; i < FERMI_MAX_SLOTS; i++) {
 		if (dev->slot_active[i]) {
+			had_touches = true;
 			input_mt_slot(dev->input, i);
 			input_mt_report_slot_state(dev->input, MT_TOOL_FINGER, false);
 			dev->slot_active[i] = false;
 			
-			dev_dbg(&dev->interface->dev, "Touch UP slot %d\n", i);
+			dev_info(&dev->interface->dev, "TOUCH UP: slot=%d", i);
 		}
 	}
 	
-	/* Release BTN_TOUCH for legacy single-touch compatibility */
-	input_report_key(dev->input, BTN_TOUCH, 0);
-	
-	input_sync(dev->input);
+	if (had_touches) {
+		/* Release BTN_TOUCH for legacy single-touch compatibility */
+		input_report_key(dev->input, BTN_TOUCH, 0);
+		input_sync(dev->input);
+	}
 }
 
 /* Process incoming packet using length-based detection */
