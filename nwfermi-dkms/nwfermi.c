@@ -1,7 +1,7 @@
 /*
- * NextWindow Fermi USB Touchscreen Driver v2.0.7
+ * NextWindow Fermi USB Touchscreen Driver v2.0.8
  * 
- * Fixed spurious touch filtering
+ * Strict coordinate validation to filter garbage packets
  * Works directly with Wayland/GNOME - no daemon needed
  */
 
@@ -14,7 +14,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 
-#define DRIVER_VERSION "2.0.7"
+#define DRIVER_VERSION "2.0.8"
 #define DRIVER_AUTHOR "Daniel Newton, refactored with length-based detection"
 #define DRIVER_DESC "NextWindow Fermi USB Touchscreen Driver"
 
@@ -46,15 +46,19 @@
 #define COORD_Y_OFFSET_MSB     29
 
 /* Raw coordinate ranges (from device) */
-#define RAW_X_MIN              250
-#define RAW_X_MAX              8500   /* X range: 250-8500 */
-#define RAW_Y_MIN              0
-#define RAW_Y_MAX              4500   /* Y range: 0-4500 */
+#define RAW_X_MIN              200    /* Actual observed minimum */
+#define RAW_X_MAX              8600   /* Actual observed maximum */
+#define RAW_Y_MIN              0      /* Actual observed minimum */
+#define RAW_Y_MAX              4600   /* Actual observed maximum */
 
-/* Invalid coordinate detection (filter spurious touches)
- * Idle packets show extreme/invalid values - filter these out
+/* Coordinate validation - STRICT bounds checking
+ * Any coordinate outside these ranges is garbage data
+ * Based on observed valid range: X(200-8600), Y(0-4600)
  */
-#define RAW_COORD_MAX_VALID    10000  /* Any coord >10000 is invalid */
+#define RAW_X_VALID_MIN        200
+#define RAW_X_VALID_MAX        9000   /* Allow some margin */
+#define RAW_Y_VALID_MIN        0
+#define RAW_Y_VALID_MAX        5000   /* Allow some margin */
 
 /* Screen resolution (adjust for your display) */
 #define SCREEN_WIDTH           1366
@@ -107,21 +111,24 @@ static void fermi_parse_touch_packet_by_length(struct fermi_dev *dev, const u8 *
 	}
 	
 	/* Extract coordinates (little-endian 16-bit values)
-	 * - Bytes 24-25: X coordinate (LSB first) - range 250-8500
-	 * - Bytes 28-29: Y coordinate (LSB first) - range 0-4500
+	 * - Bytes 24-25: X coordinate (LSB first)
+	 * - Bytes 28-29: Y coordinate (LSB first)
 	 */
 	raw_x = data[COORD_X_OFFSET_LSB] | (data[COORD_X_OFFSET_MSB] << 8);
 	raw_y = data[COORD_Y_OFFSET_LSB] | (data[COORD_Y_OFFSET_MSB] << 8);
 	
-	/* Filter spurious "idle" touches
-	 * Idle/invalid packets show extreme values (>10000)
-	 * These appear in debug as raw(18,64778) or raw(61953,61697)
-	 * Only process coordinates within reasonable ranges
+	/* STRICT coordinate validation - reject garbage packets
+	 * The device sends many packets with corrupt coordinate data.
+	 * Valid touches have X in range 200-8600, Y in range 0-4600.
+	 * Anything outside these bounds is garbage (e.g., 60000-65000).
+	 * 
+	 * This is the CRITICAL filter - without it, garbage packets
+	 * create phantom touches all over the screen.
 	 */
-	if (raw_x > RAW_COORD_MAX_VALID || raw_y > RAW_COORD_MAX_VALID) {
-		/* This is an idle/garbage packet - ignore it */
+	if (raw_x < RAW_X_VALID_MIN || raw_x > RAW_X_VALID_MAX ||
+	    raw_y < RAW_Y_VALID_MIN || raw_y > RAW_Y_VALID_MAX) {
 		dev_dbg(&dev->interface->dev,
-			"Filtered spurious touch: raw(%u,%u)\n", raw_x, raw_y);
+			"Filtered invalid coordinates: raw(%u,%u)\n", raw_x, raw_y);
 		return;
 	}
 	
