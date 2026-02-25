@@ -1,4 +1,4 @@
-# NextWindow Fermi Touchscreen Driver v2.1.5
+# NextWindow Fermi Touchscreen Driver v[TBD]
 
 A modern Linux kernel driver for NextWindow Fermi USB touchscreens, designed to work directly with Wayland/GNOME without requiring a userspace daemon.
 
